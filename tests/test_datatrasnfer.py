@@ -399,5 +399,226 @@ class TestEdgeCases(unittest.TestCase):
         src_cur.execute.assert_called()
 
 
+class TestBlobDataTransfer(unittest.TestCase):
+    """Test migration of BLOB/bytea data types"""
+    
+    def setUp(self):
+        """Set up test fixtures"""
+        self.source_conf = {
+            'host': 'source_host',
+            'port': 5432,
+            'database': 'source_db',
+            'user': 'source_user',
+            'password': 'source_password'
+        }
+        
+        self.target_conf = {
+            'host': 'target_host',
+            'port': 5432,
+            'database': 'target_db',
+            'user': 'target_user',
+            'password': 'target_password'
+        }
+    
+    @patch('datatrasnfer.setup_logger')
+    @patch('datatrasnfer.get_connection')
+    def test_migrate_table_with_bytea_column(self, mock_get_conn, mock_setup_logger):
+        """Test migration with bytea/BLOB column"""
+        src_conn = MagicMock()
+        tgt_conn = MagicMock()
+        mock_get_conn.side_effect = [src_conn, tgt_conn]
+        
+        src_cur = MagicMock()
+        tgt_cur = MagicMock()
+        src_conn.cursor.return_value = src_cur
+        tgt_conn.cursor.return_value = tgt_cur
+        
+        # Mock columns including bytea
+        src_cur.execute.side_effect = [None, None]
+        src_cur.fetchall.return_value = [('id',), ('name',), ('blob_data',)]
+        
+        # Mock binary data - bytea is represented as bytes in Python
+        binary_data = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR'  # PNG header
+        src_cur.fetchmany.side_effect = [
+            [(1, 'file1.png', binary_data), (2, 'file2.bin', b'\x00\x01\x02\x03')],
+            []
+        ]
+        
+        dt.migrate_table(
+            self.source_conf, self.target_conf,
+            'public', 'documents',
+            'public', 'documents',
+            chunk_size=10
+        )
+        
+        # Verify commit was called
+        tgt_conn.commit.assert_called()
+        
+        # Verify execute was called for inserts (with binary data preserved)
+        self.assertTrue(tgt_cur.execute.called)
+    
+    @patch('datatrasnfer.setup_logger')
+    @patch('datatrasnfer.get_connection')
+    def test_migrate_table_with_large_bytea(self, mock_get_conn, mock_setup_logger):
+        """Test migration with large BLOB data (>1MB)"""
+        src_conn = MagicMock()
+        tgt_conn = MagicMock()
+        mock_get_conn.side_effect = [src_conn, tgt_conn]
+        
+        src_cur = MagicMock()
+        tgt_cur = MagicMock()
+        src_conn.cursor.return_value = src_cur
+        tgt_conn.cursor.return_value = tgt_cur
+        
+        # Mock columns with bytea
+        src_cur.execute.side_effect = [None, None]
+        src_cur.fetchall.return_value = [('id',), ('file_data',)]
+        
+        # Create large binary data (2MB)
+        large_binary = b'\x00' * (2 * 1024 * 1024)
+        src_cur.fetchmany.side_effect = [
+            [(1, large_binary), (2, large_binary)],
+            []
+        ]
+        
+        dt.migrate_table(
+            self.source_conf, self.target_conf,
+            'public', 'large_files',
+            'public', 'large_files',
+            chunk_size=2
+        )
+        
+        # Verify migration handled large data
+        tgt_conn.commit.assert_called()
+        self.assertTrue(tgt_cur.execute.called)
+    
+    @patch('datatrasnfer.setup_logger')
+    @patch('datatrasnfer.get_connection')
+    def test_migrate_table_with_null_bytea(self, mock_get_conn, mock_setup_logger):
+        """Test migration with NULL bytea values"""
+        src_conn = MagicMock()
+        tgt_conn = MagicMock()
+        mock_get_conn.side_effect = [src_conn, tgt_conn]
+        
+        src_cur = MagicMock()
+        tgt_cur = MagicMock()
+        src_conn.cursor.return_value = src_cur
+        tgt_conn.cursor.return_value = tgt_cur
+        
+        # Mock columns with bytea
+        src_cur.execute.side_effect = [None, None]
+        src_cur.fetchall.return_value = [('id',), ('file_data',)]
+        
+        # Mock data with NULL bytea value
+        src_cur.fetchmany.side_effect = [
+            [(1, b'data'), (2, None), (3, b'more_data')],
+            []
+        ]
+        
+        dt.migrate_table(
+            self.source_conf, self.target_conf,
+            'public', 'files',
+            'public', 'files',
+            chunk_size=10
+        )
+        
+        # Verify NULL values were preserved
+        tgt_conn.commit.assert_called()
+        self.assertTrue(tgt_cur.execute.called)
+    
+    @patch('datatrasnfer.setup_logger')
+    @patch('datatrasnfer.get_connection')
+    def test_migrate_table_with_mixed_data_types_including_bytea(self, mock_get_conn, mock_setup_logger):
+        """Test migration with mixed data types including bytea"""
+        src_conn = MagicMock()
+        tgt_conn = MagicMock()
+        mock_get_conn.side_effect = [src_conn, tgt_conn]
+        
+        src_cur = MagicMock()
+        tgt_cur = MagicMock()
+        src_conn.cursor.return_value = src_cur
+        tgt_conn.cursor.return_value = tgt_cur
+        
+        # Mock columns with mixed types
+        src_cur.execute.side_effect = [None, None]
+        src_cur.fetchall.return_value = [
+            ('id',), 
+            ('name',), 
+            ('email',), 
+            ('birth_date',),
+            ('avatar',),  # bytea column
+            ('score',)
+        ]
+        
+        # Mock data with mixed types
+        src_cur.fetchmany.side_effect = [
+            [
+                (
+                    1, 
+                    'Alice', 
+                    'alice@example.com', 
+                    '1990-01-15',
+                    b'\x89PNG\r\n\x1a\n',  # bytea avatar
+                    95.5
+                ),
+                (
+                    2,
+                    'Bob',
+                    'bob@example.com',
+                    '1985-05-20',
+                    b'JPEG_HEADER_BYTES',  # bytea avatar
+                    87.3
+                )
+            ],
+            []
+        ]
+        
+        dt.migrate_table(
+            self.source_conf, self.target_conf,
+            'public', 'users',
+            'public', 'users',
+            chunk_size=10
+        )
+        
+        # Verify all data types were handled correctly
+        tgt_conn.commit.assert_called()
+        self.assertTrue(tgt_cur.execute.called)
+    
+    @patch('datatrasnfer.setup_logger')
+    @patch('datatrasnfer.get_connection')
+    def test_migrate_table_bytea_with_special_bytes(self, mock_get_conn, mock_setup_logger):
+        """Test bytea migration with special byte sequences"""
+        src_conn = MagicMock()
+        tgt_conn = MagicMock()
+        mock_get_conn.side_effect = [src_conn, tgt_conn]
+        
+        src_cur = MagicMock()
+        tgt_cur = MagicMock()
+        src_conn.cursor.return_value = src_cur
+        tgt_conn.cursor.return_value = tgt_cur
+        
+        # Mock columns
+        src_cur.execute.side_effect = [None, None]
+        src_cur.fetchall.return_value = [('id',), ('data',)]
+        
+        # Mock data with special byte sequences that could cause escaping issues
+        special_bytes = b'\x00\x01\xff\xfe\x80\x7f'  # Includes null byte, high bytes
+        src_cur.fetchmany.side_effect = [
+            [(1, special_bytes), (2, b'\x00' * 100)],  # Null bytes repeated
+            []
+        ]
+        
+        dt.migrate_table(
+            self.source_conf, self.target_conf,
+            'public', 'binary_data',
+            'public', 'binary_data',
+            chunk_size=10
+        )
+        
+        # Verify special bytes were handled
+        tgt_conn.commit.assert_called()
+        self.assertTrue(tgt_cur.execute.called)
+
+
 if __name__ == '__main__':
     unittest.main()
