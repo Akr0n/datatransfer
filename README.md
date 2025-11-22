@@ -27,6 +27,48 @@ A Python utility for migrating data between PostgreSQL databases.
 pip install -r requirements.txt
 ```
 
+## Development & Testing
+
+### Install Development Dependencies
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+### Run Tests
+
+```bash
+# Run all tests with coverage report
+pytest tests/ -v --cov=datatrasnfer --cov-report=html
+
+# Run specific test file
+pytest tests/test_datatrasnfer.py -v
+
+# Run specific test class or method
+pytest tests/test_datatrasnfer.py::TestGetConnection -v
+```
+
+### Code Quality Checks
+
+```bash
+# Run flake8 linting
+flake8 datatrasnfer.py --max-line-length=120
+
+# Run pylint
+pylint datatrasnfer.py
+
+# Format code with black
+black datatrasnfer.py
+```
+
+### Test Coverage
+
+After running tests, view the HTML coverage report:
+
+```bash
+# Generated in htmlcov/index.html
+```
+
 ## Usage
 
 1. **Configure Connection Credentials**
