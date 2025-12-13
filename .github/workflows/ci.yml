@@ -63,7 +63,7 @@ jobs:
         run: |
           pytest tests/ -v --cov=datatrasnfer --cov-report=term-missing
       - name: Upload reports
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: reports-windows
           path: |
@@ -94,7 +94,7 @@ jobs:
         run: |
           pytest tests/ -v --cov=datatrasnfer --cov-report=term-missing
       - name: Upload test reports
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: test-reports-linux
           path: |
